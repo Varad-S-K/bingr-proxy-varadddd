@@ -15,7 +15,6 @@ HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
 }
 
-# Simple cache dictionary to avoid downloading the proxy list on every single request
 _proxy_cache = {
     "proxies": [],
     "last_fetched": 0
@@ -55,9 +54,9 @@ async def proxy(path: str, request: Request):
     headers = dict(request.headers)
     headers.pop("host", None)
     headers.pop("content-length", None)
+    headers.pop("accept-encoding", None)  # KEY FIX: Forces plain uncompressed response from API
     headers.update(HEADERS)
     
-    # Fetch a proxy from the databay-labs list
     selected_proxy = await get_working_proxy()
     
     client_kwargs = {"follow_redirects": True}
@@ -65,7 +64,6 @@ async def proxy(path: str, request: Request):
         client_kwargs["proxy"] = selected_proxy
 
     try:
-        # Send request through the selected proxy
         async with httpx.AsyncClient(**client_kwargs) as client:
             response = await client.request(
                 method=request.method,
@@ -76,7 +74,7 @@ async def proxy(path: str, request: Request):
                 timeout=12.0
             )
     except Exception:
-        # Fallback: if the free proxy fails or times out, try direct connection as a failsafe
+        # Fallback to direct connection if proxy fails or times out
         try:
             async with httpx.AsyncClient(follow_redirects=True) as client:
                 response = await client.request(
