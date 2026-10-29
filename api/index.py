@@ -13,6 +13,7 @@ HEADERS = {
     'Origin': 'https://bingr.one',
     'Referer': 'https://bingr.one/',
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+    'Accept-Encoding': 'identity',  # KEY FIX: Forces the target server to send plain uncompressed text
 }
 
 _proxy_cache = {
@@ -54,7 +55,7 @@ async def proxy(path: str, request: Request):
     headers = dict(request.headers)
     headers.pop("host", None)
     headers.pop("content-length", None)
-    headers.pop("accept-encoding", None)  # KEY FIX: Forces plain uncompressed response from API
+    headers.pop("accept-encoding", None)
     headers.update(HEADERS)
     
     selected_proxy = await get_working_proxy()
