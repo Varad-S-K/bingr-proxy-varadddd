@@ -13,7 +13,6 @@ HEADERS = {
     'Origin': 'https://bingr.one',
     'Referer': 'https://bingr.one/',
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
-    'Accept-Encoding': 'identity',  # KEY FIX: Forces the target server to send plain uncompressed text
 }
 
 _proxy_cache = {
@@ -55,7 +54,6 @@ async def proxy(path: str, request: Request):
     headers = dict(request.headers)
     headers.pop("host", None)
     headers.pop("content-length", None)
-    headers.pop("accept-encoding", None)
     headers.update(HEADERS)
     
     selected_proxy = await get_working_proxy()
@@ -89,14 +87,17 @@ async def proxy(path: str, request: Request):
         except Exception as err:
             return Response(content=f"Proxy and fallback failed: {str(err)}", status_code=502)
         
-    excluded_headers = {"content-encoding", "transfer-encoding", "connection"}
+    # Exclude headers that cause transport conflicts
+    excluded_headers = {"content-encoding", "transfer-encoding", "connection", "content-length"}
     response_headers = {
         k: v for k, v in response.headers.items() 
         if k.lower() not in excluded_headers
     }
         
+    # KEY FIX: Use response.text so httpx automatically decompresses 
+    # the payload into clean, readable text/JSON instead of raw binary bytes.
     return Response(
-        content=response.content,
+        content=response.text,
         status_code=response.status_code,
         headers=response_headers
     )
