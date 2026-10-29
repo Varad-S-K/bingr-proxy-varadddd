@@ -1,11 +1,13 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import httpx
+import logging
 import random
 import re
 import time
 
 app = FastAPI()
+logger = logging.getLogger(__name__)
 
 API_BASE_URL = "https://api.bingr.one/api"
 HEADERS = {
@@ -56,7 +58,7 @@ def js_truthy(value) -> bool:
 
 
 async def request_through_proxies(method: str, url: str, **kwargs):
-    last_error = None
+    failures = []
     for proxy_url in random.sample(PROXIES, len(PROXIES)):
         try:
             async with httpx.AsyncClient(
@@ -71,19 +73,23 @@ async def request_through_proxies(method: str, url: str, **kwargs):
                     **kwargs,
                 )
 
-            # Retry proxy-level failures; upstream 4xx/5xx responses retain the
-            # route behavior below (an unsuccessful lookup returns no sources).
-            if response.status_code in {407, 502, 503, 504}:
-                last_error = RuntimeError(
-                    f"proxy returned HTTP {response.status_code}"
-                )
+            # A response is usable only when the upstream returns exactly 200.
+            # Public proxies can be blocked independently, so try the remaining
+            # proxies for every other status instead of caching it as no results.
+            if response.status_code != 200:
+                failure = f"HTTP {response.status_code} via {proxy_url}"
+                failures.append(failure)
+                logger.warning("Bingr request failed: %s", failure)
                 await response.aclose()
                 continue
             return response
         except httpx.RequestError as error:
-            last_error = error
+            failure = f"{type(error).__name__} via {proxy_url}"
+            failures.append(failure)
+            logger.warning("Bingr request failed: %s (%s)", failure, error)
 
-    raise RuntimeError(f"All configured proxies failed: {last_error or 'unknown error'}")
+    detail = "; ".join(failures) if failures else "no proxies are configured"
+    raise RuntimeError(f"No configured proxy returned HTTP 200: {detail}")
 
 
 async def ask_bingr(srv: str, media_type: str, tmdb_id: str, query: dict):
@@ -101,8 +107,8 @@ async def ask_bingr(srv: str, media_type: str, tmdb_id: str, query: dict):
         )
 
     try:
-        if not response.is_success:
-            return {"sources": [], "subtitles": []}
+        if response.status_code != 200:
+            raise RuntimeError(f"Unexpected upstream HTTP {response.status_code}")
 
         try:
             data = response.json()
