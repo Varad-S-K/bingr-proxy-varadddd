@@ -70,7 +70,7 @@ async def proxy(path: str, request: Request):
                 headers=headers,
                 params=request.query_params,
                 content=body,
-                timeout=12.0
+                timeout=15.0
             )
     except Exception:
         pass
@@ -85,26 +85,22 @@ async def proxy(path: str, request: Request):
                     headers=headers,
                     params=request.query_params,
                     content=body,
-                    timeout=10.0
+                    timeout=12.0
                 )
         except Exception as err:
             return Response(content=f"Proxy and fallback failed: {str(err)}", status_code=502)
         
-    # Exclude conflicting transport headers
-    excluded_headers = {"content-encoding", "transfer-encoding", "connection", "content-length"}
+    # Preserve original response headers (including Content-Type and Content-Encoding) 
+    # so the browser knows exactly how to render the data payload.
+    excluded_headers = {"transfer-encoding", "connection", "content-length"}
     response_headers = {
         k: v for k, v in response.headers.items() 
         if k.lower() not in excluded_headers
     }
     
-    # Safely decode the bytes to clean readable text/HTML/JSON string
-    try:
-        page_data = response.content.decode("utf-8", errors="ignore")
-    except Exception:
-        page_data = response.content
-
+    # Directly copy and return the raw page data/bytes from the requested URL
     return Response(
-        content=page_data,
+        content=response.content,
         status_code=response.status_code,
         headers=response_headers
     )
