@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import httpx
 import random
@@ -149,16 +149,19 @@ async def ask_bingr(srv: str, media_type: str, tmdb_id: str, query: dict):
         await response.aclose()
 
 
-@app.get("/stream")
-async def stream(
-    srv: str = Query(default=""),
-    t: str = Query(default="movie"),
-    id: str = Query(default=""),
-    title: str = Query(default=""),
-    year: str = Query(default=""),
-    season: str = Query(default=""),
-    episode: str = Query(default=""),
-):
+@app.get("/{path:path}")
+async def stream(request: Request, path: str):
+    # Accept the root URL as well as /stream and Vercel's rewritten function
+    # paths; all of them run the same stream lookup using URL query parameters.
+    params = request.query_params
+    srv = params.get("srv", "")
+    t = params.get("t", "movie")
+    id = params.get("id", "")
+    title = params.get("title", "")
+    year = params.get("year", "")
+    season = params.get("season", "")
+    episode = params.get("episode", "")
+
     srv = str(srv or "")
     media_type = "tv" if t == "tv" else "movie"
     tmdb_id = str(id or "")
