@@ -9,7 +9,6 @@ TARGET_BASE_URL = "https://api.bingr.one"
 PROXY_LIST_URL = "https://raw.githubusercontent.com/databay-labs/free-proxy-list/master/by-country/in/http.txt"
 
 HEADERS = {
-    'Content-Type': 'application/json',
     'Origin': 'https://bingr.one',
     'Referer': 'https://bingr.one/',
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
@@ -62,6 +61,7 @@ async def proxy(path: str, request: Request):
     if selected_proxy:
         client_kwargs["proxy"] = selected_proxy
 
+    response = None
     try:
         async with httpx.AsyncClient(**client_kwargs) as client:
             response = await client.request(
@@ -73,7 +73,10 @@ async def proxy(path: str, request: Request):
                 timeout=12.0
             )
     except Exception:
-        # Fallback to direct connection if proxy fails or times out
+        pass
+
+    # Fallback to direct connection if proxy fails or times out
+    if response is None:
         try:
             async with httpx.AsyncClient(follow_redirects=True) as client:
                 response = await client.request(
@@ -87,17 +90,21 @@ async def proxy(path: str, request: Request):
         except Exception as err:
             return Response(content=f"Proxy and fallback failed: {str(err)}", status_code=502)
         
-    # Exclude headers that cause transport conflicts
+    # Exclude conflicting transport headers
     excluded_headers = {"content-encoding", "transfer-encoding", "connection", "content-length"}
     response_headers = {
         k: v for k, v in response.headers.items() 
         if k.lower() not in excluded_headers
     }
-        
-    # KEY FIX: Use response.text so httpx automatically decompresses 
-    # the payload into clean, readable text/JSON instead of raw binary bytes.
+    
+    # Safely decode the bytes to clean readable text/HTML/JSON string
+    try:
+        page_data = response.content.decode("utf-8", errors="ignore")
+    except Exception:
+        page_data = response.content
+
     return Response(
-        content=response.text,
+        content=page_data,
         status_code=response.status_code,
         headers=response_headers
     )
